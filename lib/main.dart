@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'models/note.dart';
 import 'providers/note_provider.dart';
@@ -37,6 +39,16 @@ class DesignerNotesApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             theme: _createLightTheme(),
             darkTheme: _createDarkTheme(),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              FlutterQuillLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en', ''),
+              Locale('ja', ''),
+            ],
             home: const HomeScreen(),
           );
         },

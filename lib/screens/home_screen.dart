@@ -6,7 +6,7 @@ import '../providers/theme_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_card.dart';
 import '../widgets/filter_drawer.dart';
-// import '../screens/note_editor_screen.dart'; // 一時的にコメントアウト
+import '../screens/note_editor_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -240,36 +240,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final newNote = await noteProvider.createNote();
     
     if (mounted) {
-      // _openNoteEditor(context, newNote);
-      
-      // 一時的にSnackBarで代替
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('新しいノート「${newNote.title}」を作成しました'),
-          action: SnackBarAction(
-            label: '閉じる',
-            onPressed: () {},
-          ),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => NoteEditorScreen(noteId: newNote.id),
         ),
       );
     }
   }
 
   void _openNoteEditor(BuildContext context, Note note) {
-    // Navigator.of(context).push(
-    //   MaterialPageRoute(
-    //     builder: (context) => NoteEditorScreen(noteId: note.id),
-    //   ),
-    // );
-    
-    // 一時的にSnackBarで代替
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('ノート「${note.title}」を開く（エディター画面は後で実装）'),
-        action: SnackBarAction(
-          label: '閉じる',
-          onPressed: () {},
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NoteEditorScreen(noteId: note.id),
       ),
     );
   }
@@ -284,10 +266,14 @@ class NoteSearchDelegate extends SearchDelegate<Note?> {
   @override
   List<Widget> buildActions(BuildContext context) {
     return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () => query = '',
-      ),
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            query = '';
+            showSuggestions(context);
+          },
+        ),
     ];
   }
 
@@ -344,16 +330,9 @@ class NoteSearchDelegate extends SearchDelegate<Note?> {
                 ),
           onTap: () {
             close(context, note);
-            // Navigator.of(context).push(
-            //   MaterialPageRoute(
-            //     builder: (context) => NoteEditorScreen(noteId: note.id),
-            //   ),
-            // );
-            
-            // 一時的にSnackBarで代替  
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('ノート「${note.title}」を開く（検索結果から）'),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => NoteEditorScreen(noteId: note.id),
               ),
             );
           },
