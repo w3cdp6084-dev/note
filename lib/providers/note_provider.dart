@@ -86,6 +86,7 @@ class NoteProvider extends ChangeNotifier {
     String category = '',
     List<String> tags = const [],
     List<String> colorPalette = const [],
+    List<String> attachedImages = const [],
   }) async {
     final now = DateTime.now();
     final note = Note(
@@ -95,6 +96,7 @@ class NoteProvider extends ChangeNotifier {
       category: category,
       tags: tags,
       colorPalette: colorPalette,
+      attachedImages: attachedImages,
       createdAt: now,
       updatedAt: now,
     );

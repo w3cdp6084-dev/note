@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'models/note.dart';
 import 'providers/note_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';

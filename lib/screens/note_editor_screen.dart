@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 import '../models/note.dart';
 import '../providers/note_provider.dart';
-import '../providers/theme_provider.dart';
 
 class NoteEditorScreen extends StatefulWidget {
   final String noteId;
@@ -27,8 +30,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   
   bool _isLoading = true;
   bool _hasUnsavedChanges = false;
-  FocusNode _titleFocusNode = FocusNode();
-  FocusNode _editorFocusNode = FocusNode();
+  final FocusNode _titleFocusNode = FocusNode();
+  final FocusNode _editorFocusNode = FocusNode();
+  
+  // カテゴリ・タグ編集用
+  String _selectedCategory = '';
+  List<String> _selectedTags = [];
+  final TextEditingController _tagController = TextEditingController();
+  
+  // 画像管理用
+  List<String> _attachedImages = [];
+  final ImagePicker _imagePicker = ImagePicker();
+  
+  // カラーパレット用
+  List<String> _colorPalette = [];
 
   @override
   void initState() {
@@ -53,6 +68,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _titleController.dispose();
     _titleFocusNode.dispose();
     _editorFocusNode.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
@@ -64,6 +80,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       setState(() {
         _note = note;
         _titleController.text = note.title;
+        _selectedCategory = note.category;
+        _selectedTags = List.from(note.tags);
+        _attachedImages = List.from(note.attachedImages);
+        _colorPalette = List.from(note.colorPalette);
         
         // コンテンツをQuillエディターに読み込み
         if (note.content.isNotEmpty) {
@@ -112,6 +132,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     final updatedNote = _note.copyWith(
       title: _titleController.text.trim().isEmpty ? '無題のノート' : _titleController.text.trim(),
       content: content,
+      category: _selectedCategory,
+      tags: _selectedTags,
+      attachedImages: _attachedImages,
+      colorPalette: _colorPalette,
     );
 
     await _noteProvider.updateNote(updatedNote);
@@ -187,22 +211,36 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       },
       child: Scaffold(
         appBar: _buildAppBar(),
-        body: Column(
-          children: [
-            // タイトル入力エリア
-            _buildTitleSection(),
-            
-            // ツールバー
-            _buildToolbar(),
-            
-            // エディターエリア
-            Expanded(
-              child: _buildEditorSection(),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              children: [
+                // タイトル入力エリア
+                _buildTitleSection(),
+                
+                // カテゴリ・タグ編集エリア
+                _buildMetadataSection(),
+                
+                // 画像管理エリア
+                _buildImagesSection(),
+                
+                // カラーパレットエリア
+                _buildColorPaletteSection(),
+                
+                // ツールバー
+                _buildToolbar(),
+                
+                // エディターエリア
+                Expanded(
+                  child: _buildEditorSection(),
+                ),
+                
+                // 下部情報バー
+                _buildBottomInfoBar(),
+              ],
             ),
-            
-            // 下部情報バー
-            _buildBottomInfoBar(),
-          ],
+          ),
         ),
       ),
     );
@@ -382,6 +420,534 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
+  Widget _buildMetadataSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // カテゴリ選択
+          Row(
+            children: [
+              Icon(
+                Icons.folder_outlined,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'カテゴリ:',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      // 未選択チップ
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: const Text('未選択'),
+                          selected: _selectedCategory.isEmpty,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() {
+                                _selectedCategory = '';
+                                _hasUnsavedChanges = true;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      // カテゴリチップ
+                      ..._noteProvider.categories.map((category) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(category),
+                          selected: _selectedCategory == category,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedCategory = selected ? category : '';
+                              _hasUnsavedChanges = true;
+                            });
+                          },
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // タグ選択
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Icon(
+                  Icons.label_outline,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'タグ:',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 選択されたタグ
+                    if (_selectedTags.isNotEmpty)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _selectedTags.map((tag) => Chip(
+                          label: Text(tag),
+                          onDeleted: () {
+                            setState(() {
+                              _selectedTags.remove(tag);
+                              _hasUnsavedChanges = true;
+                            });
+                          },
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                        )).toList(),
+                      ),
+                    const SizedBox(height: 8),
+                    // タグ入力フィールド
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _tagController,
+                            decoration: InputDecoration(
+                              hintText: '新しいタグを追加',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onSubmitted: _addTag,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () => _addTag(_tagController.text),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // 既存タグの候補
+                    if (_noteProvider.allTags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _noteProvider.allTags
+                            .where((tag) => !_selectedTags.contains(tag))
+                            .map((tag) => ActionChip(
+                              label: Text(tag),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedTags.add(tag);
+                                  _hasUnsavedChanges = true;
+                                });
+                              },
+                            )).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addTag(String tag) {
+    final trimmedTag = tag.trim();
+    if (trimmedTag.isNotEmpty && !_selectedTags.contains(trimmedTag)) {
+      setState(() {
+        _selectedTags.add(trimmedTag);
+        _tagController.clear();
+        _hasUnsavedChanges = true;
+      });
+    }
+  }
+
+  Widget _buildImagesSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.image_outlined,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '添付画像:',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.add_photo_alternate, size: 20),
+                label: const Text('画像を追加'),
+              ),
+            ],
+          ),
+          if (_attachedImages.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 120,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _attachedImages.length,
+                itemBuilder: (context, index) {
+                  return _buildImageItem(_attachedImages[index], index);
+                },
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              height: 120,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  style: BorderStyle.solid,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate,
+                      size: 40,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '画像を追加してください',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageItem(String imagePath, int index) {
+    return Container(
+      width: 120,
+      margin: const EdgeInsets.only(right: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: kIsWeb 
+              ? Image.network(
+                  imagePath,
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      child: const Center(
+                        child: Icon(Icons.broken_image, size: 40),
+                      ),
+                    );
+                  },
+                )
+              : Image.file(
+                  File(imagePath),
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      child: const Center(
+                        child: Icon(Icons.broken_image, size: 40),
+                      ),
+                    );
+                  },
+                ),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 24,
+                  minHeight: 24,
+                ),
+                onPressed: () => _removeImage(index),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _attachedImages.add(image.path);
+          _hasUnsavedChanges = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('画像の追加に失敗しました: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _attachedImages.removeAt(index);
+      _hasUnsavedChanges = true;
+    });
+  }
+
+  Widget _buildColorPaletteSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.palette_outlined,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'カラーパレット:',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _showColorPicker,
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('色を追加'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ..._colorPalette.map((colorHex) {
+                final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
+                return Stack(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
+                          ),
+                          onPressed: () => _removeColor(colorHex),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+              if (_colorPalette.isEmpty)
+                Container(
+                  width: double.infinity,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'カラーパレットが空です',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showColorPicker() {
+    Color pickerColor = Theme.of(context).colorScheme.primary;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('色を選択'),
+        content: SingleChildScrollView(
+          child: ColorPicker(
+            pickerColor: pickerColor,
+            onColorChanged: (Color color) {
+              pickerColor = color;
+            },
+            labelTypes: const [],
+            pickerAreaHeightPercent: 0.8,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final hexColor = '#${pickerColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+              if (!_colorPalette.contains(hexColor)) {
+                setState(() {
+                  _colorPalette.add(hexColor);
+                  _hasUnsavedChanges = true;
+                });
+              }
+              Navigator.of(context).pop();
+            },
+            child: const Text('追加'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removeColor(String colorHex) {
+    setState(() {
+      _colorPalette.remove(colorHex);
+      _hasUnsavedChanges = true;
+    });
+  }
+
   Widget _buildBottomInfoBar() {
     final wordCount = _quillController.document.toPlainText().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
     final charCount = _quillController.document.toPlainText().length;
@@ -460,6 +1026,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       category: _note.category,
       tags: _note.tags,
       colorPalette: _note.colorPalette,
+      attachedImages: _note.attachedImages,
     );
 
     if (mounted) {
